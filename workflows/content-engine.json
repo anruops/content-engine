@@ -1,0 +1,2200 @@
+{
+  "name": "content engine",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -4272,
+        1792
+      ],
+      "id": "772c6b4a-fb38-4dbe-8d19-7b23edab63d1",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// GR Error Handler safe extraction + throttle so a 100%-failure loop can't spam you .\nconst e   = ($input.first() && $input.first().json) || {};\nconst wf  = e.workflow || {};\nconst ex  = e.execution || {};\nconst err = (ex.error || e.error || {});\n\nconst node    = (err.node && err.node.name) || ex.lastNodeExecuted || 'unknown node';\nconst message = (err.message || 'unknown error').toString();\nconst mode    = ex.mode || 'unknown';\nconst url     = ex.url || '';\nconst now     = Date.now();\nconst WINDOW_MS = 15 * 60 * 1000; // suppress repeats of the SAME failure for 15 min\n\nconst fingerprint = [wf.id || wf.name || '?', node, message.slice(0, 120)].join('|');\n\n// remember what we've alerted on, using n8n's built-in static data (no external store needed)\nconst sd = $getWorkflowStaticData('global');\nsd.seen = sd.seen || {};\nfor (const k of Object.keys(sd.seen)) {            // prune entries older than 24h\n  if (now - ((sd.seen[k] && sd.seen[k].last) || 0) > 24 * 60 * 60 * 1000) delete sd.seen[k];\n}\nconst prev     = sd.seen[fingerprint];\nconst suppress = !!(prev && (now - prev.last) < WINDOW_MS);\nconst count    = (prev ? prev.count : 0) + 1;\nsd.seen[fingerprint] = { first: prev ? prev.first : now, last: now, count };\n\nconst ts        = new Date(now).toISOString();\nconst repeatTag = count > 1 ? ` (x${count})` : '';\nconst slack_text =\n  `:rotating_light: *GR error* in *${wf.name || 'unknown'}*${repeatTag}\\n` +\n  `> node: *${node}*\\n> ${message}\\n> mode: ${mode}` + (url ? `\\n> ${url}` : '');\nconst telegram_text =\n  ` GR error - ${wf.name || 'unknown'}${repeatTag}\\n\\n` +\n  `- node: ${node}\\n- ${message}\\n- mode: ${mode}` + (url ? `\\n- ${url}` : '');\n\nreturn [{ json: {\n  alert: !suppress, suppressed: suppress, count, fingerprint,\n  workflow_name: wf.name || 'unknown', workflow_id: wf.id || '',\n  failed_node: node, error_message: message, mode, execution_url: url, ts,\n  slack_text, telegram_text\n}}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4048,
+        1792
+      ],
+      "id": "7b7ee045-e0aa-46b2-9e14-68f0330d5e07",
+      "name": "Format + throttle"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_ERROR_LOG_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "AR - Error Handler Record",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_ERROR_LOG_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_ERROR_LOG_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Count": "={{ $json.count }}",
+            "ExecutionURL": "={{ $json.execution_url }}",
+            "Timestamp": "={{ $json.ts }}",
+            "FailedNode": "={{ $json.failed_node }}",
+            "Workflow": "={{ $json.workflow_name }}",
+            "Error": "={{ $json.error_message }}",
+            "Mode": "={{ $json.mode }}",
+            "Fingerprint": "={{ $json.fingerprint }}"
+          },
+          "matchingColumns": [
+            "Fingerprint"
+          ],
+          "schema": [
+            {
+              "id": "Fingerprint",
+              "displayName": "Fingerprint",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Workflow",
+              "displayName": "Workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "FailedNode",
+              "displayName": "FailedNode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Error",
+              "displayName": "Error",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Mode",
+              "displayName": "Mode",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ExecutionURL",
+              "displayName": "ExecutionURL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Count",
+              "displayName": "Count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -3824,
+        1888
+      ],
+      "id": "5e8f61ab-a6cf-4318-9a56-7abbb39dec8d",
+      "name": "Log to Error sheet (paper trail)",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Service Account account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a1",
+              "leftValue": "={{ $json.alert }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -3824,
+        1696
+      ],
+      "id": "fe50b5ce-31ee-4381-9791-7e7074c63de9",
+      "name": "Alert? (not throttled)"
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.telegram_text }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -3600,
+        1600
+      ],
+      "id": "09e586ff-dd37-4c7d-9d80-b7bf2f25fdfb",
+      "name": "Telegram alert",
+      "webhookId": "36abc136-5b96-43d1-b4f7-902c0acd4610",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#your-error-updates-log",
+          "mode": "name"
+        },
+        "text": "={{ $json.slack_text }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        -3600,
+        1792
+      ],
+      "id": "f5f372d7-59a1-4bb8-8a81-13c38b16e23d",
+      "name": "Slack alert",
+      "webhookId": "5ca80263-1d8f-43b0-b5bd-171171bde923",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -4160,
+        -48
+      ],
+      "id": "36a956c6-d466-4252-aa01-46f4a297b9af",
+      "name": "Schedule Trigger",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "url": "https://blog.n8n.io/rss/",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        -3936,
+        -336
+      ],
+      "id": "ed74e6ad-5192-44e5-9a83-136383565d4d",
+      "name": "RSS Read",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "src-0",
+              "name": "source",
+              "value": "n8n Blog",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3712,
+        -336
+      ],
+      "id": "33d7fc18-d456-4f65-b1ea-a548fe51de0c",
+      "name": "Set source (n8n Blog)"
+    },
+    {
+      "parameters": {
+        "url": "https://zapier.com/blog/feeds/latest/",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        -3936,
+        -144
+      ],
+      "id": "03f80dcf-0d99-4d28-a74a-f06d84da54b1",
+      "name": "RSS Read1",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "src-1",
+              "name": "source",
+              "value": "Zapier Blog",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3712,
+        -144
+      ],
+      "id": "10b0232b-123a-4481-98c5-a4d914ba5465",
+      "name": "Set source (Zapier Blog)"
+    },
+    {
+      "parameters": {
+        "url": "https://openai.com/news/rss.xml",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        -3936,
+        48
+      ],
+      "id": "bc856891-cebe-45a9-85b3-7b84208407b4",
+      "name": "RSS Read OpenAI",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "src-3",
+              "name": "source",
+              "value": "OpenAI",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3712,
+        48
+      ],
+      "id": "92dce44d-6bf4-40f6-8c60-6f886af2d03f",
+      "name": "Set source (OpenAI)"
+    },
+    {
+      "parameters": {
+        "url": "https://www.fastcompany.com/technology/rss",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        -3936,
+        240
+      ],
+      "id": "bbb0850f-eff6-473b-8ad8-c701c643bbd1",
+      "name": "RSS Read FastCo",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "src-4",
+              "name": "source",
+              "value": "Fast Company Tech",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -3712,
+        240
+      ],
+      "id": "c90efe83-d1e4-4e56-b998-23d6b720d0bd",
+      "name": "Set source (Fast Company Tech)"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -3488,
+        -80
+      ],
+      "id": "dd4ccc52-3283-482a-a85f-52057031bb35",
+      "name": "Merge feeds"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "=",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "name",
+          "cachedResultName": "",
+          "cachedResultUrl": ""
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -3264,
+        -48
+      ],
+      "id": "98ce0e6e-e934-43d5-b2cf-50ae00ff27e2",
+      "name": "Get row(s) in sheet",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ALWAYS_KEEP = new Set(['n8n Blog', 'Zapier Blog', 'OpenAI']);\nconst PER_FEED_CAP = 25;\nconst PILLAR_KEYWORDS = [\n  'ai', 'llm', 'gpt', 'anthropic', 'claude', 'openai', 'chatgpt', 'gemini', 'model', 'agent', 'copilot', 'mcp', 'prompt', 'rag',\n  'automat', 'workflow', 'integrat', 'api', 'webhook', 'orchestrat', 'idempoten', 'pipeline', 'etl', 'rpa', 'trigger', 'node',\n  'zapier', 'n8n', 'make.com', 'no code', 'low code', 'airtable', 'cal.com', 'notion', 'obsidian', 'google sheets', 'slack', 'telegram',\n  'system', 'database', 'postgres', 'supabase', 'firebase', 'backend', 'credential', 'rbac', 'versioning', 'observability', 'reliab', 'monitor', 'security', 'soc 2', 'compliance', 'self host',\n  'business', 'operation', 'process', 'sop', 'standard operating', 'crm', 'onboarding', 'invoic', 'billing', 'revenue', 'client', 'customer', 'lead', 'sales', 'funnel', 'systeme', 'quickbooks', 'bookkeeping', 'accounting', 'cpq', 'dashboard', 'kpi', 'productivit', 'project management', 'saas', 'subscription'\n];\nconst BLOCKLIST = [\n  'deal', 'deals', 'sale', 'discount', 'coupon', 'printer', 'printers', 'earbud', 'earbuds', 'headphone', 'headphones',\n  'smartphone', 'smartphones', 'iphone', 'ipad', 'tablet', 'wearable', 'smartwatch', 'gadget', 'gadgets', 'doorbell',\n  'rideshare', 'uber', 'lyft', 'movie', 'movies', 'film', 'films', 'thriller', 'hollywood', 'celebrity', 'celebrities',\n  'nintendo', 'playstation', 'xbox', 'console', 'unboxing', '3d printer', 'box office', 'gift guide', 'folding phone'\n];\n\nconst normText = (s) => (' ' + String(s || '').toLowerCase().replace(/[^a-z0-9. ]+/g, ' ').replace(/\\s+/g, ' ').trim() + ' ');\nconst isPhrase = (k) => k.indexOf(' ') >= 0 || k.indexOf('.') >= 0;\nconst pillarHit = (hay, tokens) => PILLAR_KEYWORDS.some((k) => isPhrase(k) ? hay.indexOf(' ' + k + ' ') >= 0 : tokens.some((t) => t.startsWith(k)));\nconst blockHit = (hay, tokenSet) => BLOCKLIST.some((k) => isPhrase(k) ? hay.indexOf(' ' + k + ' ') >= 0 : tokenSet.has(k));\n\nconst toManila = (val) => { const d = new Date(val); if (isNaN(d)) return ''; return d.toLocaleString('sv-SE', { timeZone: 'Asia/Manila' }); };\n\nconst existing = new Set($('Get row(s) in sheet').all().map((i) => i.json.link).filter(Boolean));\nconst cleanLink = (u) => { try { const x = new URL(String(u)); x.search = ''; x.hash = ''; return x.toString(); } catch (e) { return String(u || ''); } };\n\nconst feed = $('Merge feeds').all();\nconst bySource = new Map();\n\nfor (const item of feed) {\n  const j = item.json || {};\n  const link = cleanLink(j.link || j.guid || '');\n  if (!link || existing.has(link)) continue;\n  existing.add(link);\n\n  const title = (j.title || '').toString().trim();\n  const rawBody = [j['content:encoded'], j.content, j['content:encodedSnippet'], j.contentSnippet, title]\n    .filter(Boolean)\n    .map((s) => s.toString().replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim())\n    .sort((a, b) => b.length - a.length)[0] || '';\n  const source = j.source || 'Unknown';\n\n  const hay = normText(title + ' ' + rawBody);\n  const tokens = hay.trim().split(' ');\n  const tokenSet = new Set(tokens);\n\n  if (blockHit(hay, tokenSet)) continue;\n  if (!ALWAYS_KEEP.has(source) && !pillarHit(hay, tokens)) continue;\n\n  const source_text = rawBody.slice(0, 400) + (rawBody.length > 400 ? '...' : '');\n  const llm_body = rawBody.slice(0, 1500);\n  const rawDate = j.isoDate || j.pubDate || '';\n  const pub_ts = Date.parse(rawDate) || 0;\n\n  if (!bySource.has(source)) bySource.set(source, []);\n  bySource.get(source).push({ json: { title, link, source, pub_date: toManila(rawDate), pub_ts, source_text, llm_body } });\n}\n\nfor (const [src, arr] of bySource) {\n  arr.sort((a, b) => (b.json.pub_ts || 0) - (a.json.pub_ts || 0));\n  if (arr.length > PER_FEED_CAP) bySource.set(src, arr.slice(0, PER_FEED_CAP));\n}\n\nconst buckets = [...bySource.values()];\nconst out = [];\nlet added = true;\nwhile (added) { added = false; for (const b of buckets) { if (b.length) { out.push(b.shift()); added = true; } } }\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3040,
+        -48
+      ],
+      "id": "f32039e2-5c1a-4e22-8955-f0838812963a",
+      "name": "Code in JavaScript",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "maxItems": 5
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -2816,
+        -48
+      ],
+      "id": "cf038bc8-c584-4e61-8a0c-8bcf4d877ddb",
+      "name": "Limit"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=ROLE\nYou are the writer for The GR Framework. You turn one tech or business article into one\neducational, informative social post that teaches the reader something real. Follow every\ninstruction below exactly. Do not assume, do not improvise structure, do not add anything\nthat is not asked for.\n\nWHAT THE GR FRAMEWORK IS (the cause you write for)\nThe GR Framework helps people build reliable business systems: the automations, tools, and\nprocesses that keep a business running without the owner holding it all together by hand.\nThe belief is simple: certainty on the surface comes from solid systems underneath. Most\npeople chase the shiny new tool; the GR Framework teaches the unglamorous part everyone\nskips, the part that makes a system dependable, repeatable, and safe to leave running.\nReliability, stability, and trust in your own operation are the whole point.\n\nWHO YOU ARE TEACHING (write for all three at once)\n- Business owners with half-built systems that mostly work but break in places.\n- Complete beginners who are just learning these tools and the words for them.\n- Fellow practitioners in project management, operations, systems, automation, and business.\nAssume the reader is smart but new to THIS topic. Teach like a friendly peer, not an expert\nshowing off. If you use a technical word, define it in plain language in the same sentence.\n\nTHE FOUR PILLARS - choose based on what the ARTICLE is mainly about (its subject), NOT the reliability lesson you add at the end (that lesson is always about systems, so it must NOT decide the pillar). Decide in this order and stop at the first match:\n1. Mainly about running the business (money, clients, sales, bookkeeping, pricing, hiring, operations)? -> BUSINESS\n2. Mainly about connecting tools or making tasks run on their own (a workflow, an integration, a no-code or low-code automation)? -> AUTOMATION\n3. Mainly about infrastructure or architecture (how systems are built, data storage, security, access control, scaling)? -> SYSTEMS\n4. Otherwise, a specific tool, app, AI model, or tech news itself -> TECH\nExamples: an AI writing apps roundup -> TECH. A named AI model or assistant like Fyxer or Astra -> TECH. Bookkeeping software -> BUSINESS. A workflow tool's automation feature -> AUTOMATION. Database or security architecture -> SYSTEMS.\n\nYOUR TASK\n1. Read the article. In your head, answer these questions before you write:\n   a) What is the ONE specific thing this article is about? (the real tool, company,\n      feature, or finding, never a generic theme)\n   b) What is the ONE useful thing a reader should understand about it?\n   c) Why does that matter, and what value are you adding on top of the article, that a\n      reader would NOT get just from the headline? Your caption must deliver on this:\n      teach or explain something the article alone does not hand them.\n2. Choose the one pillar that fits best.\n3. Write a short graphic line and a longer teaching caption, both clearly about THIS article.\n\nOUTPUT FORMAT\nReturn ONLY this JSON, nothing before or after, no code fence:\n{\"pillar\":\"...\",\"graphic_caption\":\"...\",\"caption\":[\"short line\",\"short line\",{\"list\":[\"item\",\"item\"]},\"short line\"],\"hashtags\":[\"...\",\"...\"]}\n\ngraphic_caption: the short line printed on the image. 6 to 12 words. Names the real subject\nand the idea you are teaching. Plain and clear, not clickbait, not a question.\n\ncaption: an ORDERED array of blocks, written PUNCHY - short, high-impact, easy to skim on a phone. Total roughly 150 to 250 words (shorter than prose). Do not join them yourself. Each block is EITHER:\n  - a STRING = ONE short sentence on its own line (rarely two). Break a long thought into two blocks instead of one long line.\n  - an OBJECT {\"list\": [\"...\", \"...\"]} = an arrow list of 2 to 5 short items, used when you name distinct options, steps, kinds, or metrics. Format each item as a short label then a colon then a few plain words.\nFlow (adapt and VARY it, do not use the same skeleton every time):\n  1. A one-line opener that says plainly what the thing is (this is the hook).\n  2. One or two one-line blocks explaining how it works or why it matters, in plain words, defining any term in the same line.\n  3. Where the article names distinct options, steps, parts, or numbers, an arrow {\"list\": [...]} block, each item one short line.\n  4. A one-line takeaway.\n  5. A one-line 'where to use it', then one line on why it is worth attention.\nWhite space is the point: many short lines, not a few long paragraphs. Prefer the plainest word; introduce a technical term only when it earns its place, define it in the same line, and teach at most two new terms in the whole post.\n\nhashtags: an array of 5 to 8 short hashtags relevant to THIS article's subject, plus the pillar theme and the brand. Each is one word or joinedwords, no spaces, letters and numbers only, lowercase except real product names. Include the real tool or topic, the pillar theme, and ALWAYS include \"#TheGRFramework\". Plain and relevant, not spammy, no banned or hype words. Example: [\"#automation\",\"#nocode\",\"#airtable\",\"#smallbusiness\",\"#TheGRFramework\"].\n\nHOW TO WRITE (voice)\n- Teach and inform. Welcoming, patient, plain-spoken, like explaining to a friend who is new.\n- Lead with the idea and what it makes possible. Never lead with the reader's mistake.\n- Be definitive and clear. Short words, full explanations, layman's terms always.\n- Flowing sentences joined by commas and semicolons, not a list of clipped one-liners.\n- Vary how every post opens.\n\nNEVER DO THIS\n- Never attack, scold, judge, or imply the reader or anyone is failing, wasting time, or\n  doing it wrong.\n- Never use these phrases: 'Most operators', 'Most owners', 'Most businesses', 'Most teams',\n  'you waste', 'you are wasting', 'you are losing', 'Stop doing', 'The bottleneck', 'The real\n  risk', 'The real cost', 'The real problem', 'is a liability', 'silent killer', 'silent\n  thief', 'is broken', 'is failing'.\n- Never use hype words: dive into, unlock, seamless, leverage, robust, empower, streamline,\n  synergy, turnkey, best-in-class.\n- Never use an em-dash. Use commas, semicolons, or periods.\n- Never use fear or doom framing. Stay calm and factual.\n- Never repeat an ad, button, or link from the article (for example 'Try n8n' or 'Sign up free').\n- Never put hashtags or emojis inside the caption or graphic_caption; hashtags belong ONLY in the hashtags field. Never add a closing sign-off line.\n- Never output anything except the JSON object.\n\nGOOD EXAMPLE (copy this tone, depth, and length)\nArticle: a roundup of online form builders.\n{\"pillar\":\"TECH\",\"graphic_caption\":\"Turning a form into the start of a workflow\",\"caption\":[\"A form builder lets you make an online form without any code.\",\"Most people use it just to collect replies. That is fine, but the reply does not have to be where things stop.\",\"Every submission is a piece of data, and data can hand itself to the next step.\",\"One form can quietly kick off real work:\",{\"list\":[\"A support request opens a ticket\",\"A signup adds someone to your email list\",\"A new-hire form starts an onboarding checklist\"]},\"The form is not a mailbox. It is the front door to a process.\",\"Look at one form you already have and ask what happens after someone hits submit.\",\"If the answer is that someone copies it somewhere by hand, that is where a little automation saves you time.\"],\"hashtags\":[\"#formbuilders\",\"#automation\",\"#nocode\",\"#workflow\",\"#smallbusiness\",\"#operations\",\"#TheGRFramework\"]}\n\nBAD EXAMPLE (never write like this)\nOnline form builders are failing your operations if you only use them for lead collection.\nMost operators treat forms as a dead end.\nWhy it is wrong: it opens by telling the reader they are doing it wrong, it uses the banned\nphrase 'Most operators', and it lectures instead of teaching.\n\nNow write the post for this article.\nARTICLE TITLE: {{ $json.title }}\nARTICLE TEXT: {{ $json.llm_body }}\nOutput only the JSON object.",
+        "messages": {
+          "messageValues": []
+        },
+        "batching": {
+          "batchSize": 2,
+          "delayBetweenBatches": 4000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -2592,
+        -48
+      ],
+      "id": "f806d798-7e9f-49c1-8700-98c26b5c3428",
+      "name": "Basic LLM Chain",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {
+          "temperature": 0.8
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -2512,
+        192
+      ],
+      "id": "013f7a2d-5985-4dff-8776-5711bf29ccbd",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split model output into pillar / graphic_caption / caption / hashtags. Runs over all items.\n// Fast path: JSON.parse (handles flat string arrays AND valid {\"list\":[...]} blocks).\n// Fallback: if JSON is invalid (the weak model sometimes jams a paragraph inside a list\n// object -> invalid JSON), SALVAGE the fields by pulling the quoted strings out directly,\n// so a broken row still yields a usable caption instead of a raw-JSON dump.\nconst out = [];\nconst items = $input.all();\nconst NL = String.fromCharCode(10);\nconst ARROW = String.fromCharCode(8594);\nfunction normLine(s){ s = String(s == null ? '' : s).trim(); return s.replace(/^\\s*[-*\\u2022\\u2192]\\s+/, ARROW + ' '); }\nfunction renderLines(flat){\n  const blocks = []; let buf = [];\n  flat.forEach(function(s){ if (!s) return; if (s.charAt(0) === ARROW) { buf.push(s); } else { if (buf.length){ blocks.push(buf.join(NL)); buf=[]; } blocks.push(s); } });\n  if (buf.length) blocks.push(buf.join(NL));\n  return blocks.join(NL + NL);\n}\nfunction cleanTags(tags){\n  const clean = tags.map(function(t){ return '#' + String(t||'').replace(/^#+/,'').replace(/[^A-Za-z0-9]/g,''); }).filter(function(x){ return x.length > 1; });\n  if (clean.map(function(t){ return t.toLowerCase(); }).indexOf('#thegrframework') < 0) clean.push('#TheGRFramework');\n  const seen = {}; const uniq = [];\n  clean.forEach(function(t){ const k = t.toLowerCase(); if (!seen[k]) { seen[k] = 1; uniq.push(t); } });\n  return uniq.slice(0, 8).join(' ');\n}\nfor (let i = 0; i < items.length; i++) {\n  let raw = (items[i].json.text == null ? '' : items[i].json.text).toString();\n  raw = raw.replace(/```+\\s*json/gi, '').replace(/```+/g, '').trim();\n  let pillar = '', graphic_caption = '', caption = '', hashtags = '';\n  try {\n    const m = raw.match(/\\{[\\s\\S]*\\}/);\n    let js = (m ? m[0] : raw).replace(/,\\s*([}\\]])/g, '$1');\n    const o = JSON.parse(js);\n    pillar = (o.pillar || '').toString().trim().toUpperCase();\n    graphic_caption = (o.graphic_caption || '').toString().trim();\n    let arr = Array.isArray(o.caption) ? o.caption : [o.caption];\n    let flat = [];\n    arr.forEach(function(x){ if (x && typeof x === 'object' && Array.isArray(x.list)) { x.list.forEach(function(it){ flat.push(ARROW + ' ' + String(it || '').trim()); }); } else { const s = normLine(x); if (s) flat.push(s); } });\n    caption = renderLines(flat);\n    const tags = Array.isArray(o.hashtags) ? o.hashtags : (o.hashtags ? String(o.hashtags).split(/[\\s,]+/) : []);\n    hashtags = cleanTags(tags);\n  } catch (e) {\n    const pm = raw.match(/\"pillar\"\\s*:\\s*\"([^\"]*)\"/i);\n    const gm = raw.match(/\"graphic_caption\"\\s*:\\s*\"([^\"]*)\"/i);\n    pillar = pm ? pm[1].trim().toUpperCase() : '';\n    graphic_caption = gm ? gm[1].trim() : '';\n    let cstart = raw.search(/\"caption\"\\s*:/);\n    let region = cstart >= 0 ? raw.slice(cstart) : raw;\n    let hstart = region.search(/\"hashtags\"\\s*:/);\n    if (hstart >= 0) region = region.slice(0, hstart);\n    let lines = []; let re = /\"([^\"]*)\"/g; let mm;\n    while ((mm = re.exec(region)) !== null) {\n      let s = mm[1].trim();\n      if (!s) continue;\n      const low = s.toLowerCase();\n      if (low === 'list' || low === 'caption' || low === 'pillar' || low === 'graphic_caption' || low === 'hashtags') continue;\n      if (s.charAt(0) === '#') continue;\n      lines.push(normLine(s));\n    }\n    caption = renderLines(lines);\n    hashtags = cleanTags(raw.match(/#[A-Za-z0-9]+/g) || []);\n  }\n  if (['SYSTEMS','AUTOMATION','BUSINESS','TECH'].indexOf(pillar) < 0) pillar = '';\n  out.push({ json: { pillar, graphic_caption, caption, hashtags }, pairedItem: { item: i } });\n}\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2240,
+        -48
+      ],
+      "id": "865a28e8-9c59-46c3-8795-c6d845bcf61f",
+      "name": "Split fields"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "=",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_QUEUE_SHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $('Limit').item.json.title }}",
+            "link": "={{ $('Limit').item.json.link }}",
+            "source": "={{ $('Limit').item.json.source }}",
+            "pub_date": "={{ $('Limit').item.json.pub_date }}",
+            "source_text": "={{ $('Limit').item.json.source_text }}",
+            "pillar": "={{ $json.pillar }}",
+            "graphic_caption": "={{ $json.graphic_caption }}",
+            "draft_caption": "={{ $json.caption + \"\\n\\nThe part that's easy to skip, the GR Framework doesn't. Follow the build.\" + ($json.hashtags ? \"\\n\\n\" + $json.hashtags : \"\") }}",
+            "status": "Pending"
+          },
+          "matchingColumns": [
+            "link"
+          ],
+          "schema": [
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "link",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pub_date",
+              "displayName": "pub_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_text",
+              "displayName": "source_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pillar",
+              "displayName": "pillar",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "graphic_caption",
+              "displayName": "graphic_caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "draft_caption",
+              "displayName": "draft_caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "graphic_key",
+              "displayName": "graphic_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_order",
+              "displayName": "post_order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -2016,
+        -48
+      ],
+      "id": "be979ab6-27be-493b-8d32-51804848c5e1",
+      "name": "Append or update row in sheet",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -4032,
+        1040
+      ],
+      "id": "0f2325dc-146d-451b-8990-01ea5c406927",
+      "name": "When clicking 'Execute workflow'"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "a19bdf12-5ce5-4f47-a3f2-1a24e8896c74",
+      "name": "Schedule (EDT)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -4032,
+        848
+      ],
+      "notes": "Fires in America/New_York (workflow timezone = EDT/EST, DST-safe). Active: weekdays 9AM. Ramp to 3 posts/day: 0 9,10,17 * * 1-5. Each fire posts ONE approved row (Limit=1)."
+    },
+    {
+      "parameters": {
+        "url": "https://graph.facebook.com/v26.0/me?fields=id,name",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "options": {}
+      },
+      "id": "bdb86e9c-3858-4cd7-a399-0d372916c062",
+      "name": "Check token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3808,
+        944
+      ],
+      "onError": "continueErrorOutput",
+      "notes": "PRE-FLIGHT GUARD. A cheap authenticated call. If the token is expired, revoked, or under-scoped for basic access, Meta returns error 190 and this routes to 'Token invalid - stop' BEFORE anything posts. NOTE: this only proves the token is valid, NOT that it carries instagram_content_publish - a FB-only token still passes here and fails later at IG (that path is handled by the partial-failure guard)."
+    },
+    {
+      "parameters": {
+        "errorMessage": "FB/IG TOKEN INVALID, EXPIRED, OR UNDER-SCOPED. Fix: regenerate a never-expiring Page token (Access Token Debugger -> Extend Access Token -> then GET /me/accounts) and paste it into the 'Facebook Graph account' credential. Required scopes: pages_show_list, pages_read_engagement, pages_manage_posts, instagram_basic, instagram_content_publish. Full runbook in GR-Meta-KnowledgeBase.md."
+      },
+      "id": "b40d021b-5d6f-46d9-8bf7-d14211d70a36",
+      "name": "Token invalid - stop",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        -3584,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v26.0/YOUR_PAGE_ID?fields=instagram_business_account",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "options": {}
+      },
+      "id": "9d2a300f-e204-4341-bb86-e9bbe2a3e6ac",
+      "name": "Get IG user ID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3584,
+        848
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "notes": "GET /{page-id}?fields=instagram_business_account -> resolves the IG Business Account ID (YOUR_IG_BUSINESS_ACCOUNT_ID as of 2026-09-16) at runtime. Referenced downstream as $('Get IG user ID').first().json.instagram_business_account.id."
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_CONTENT_QUEUE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "The GR Framework - Content Queue",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_QUEUE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "f7fa4f73-8151-4428-ba34-a71c70592a21",
+      "name": "Get queue rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -3360,
+        848
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Service Account account"
+        }
+      },
+      "notes": "Reads the WHOLE sheet (no sheet-side filter). The built-in Filters dropdown fails to bind on import ('Error fetching options') and silently returns everything, so filtering is done in the next Code node instead - import-proof."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Do the whole 'pick the next post' step in code so it never depends on the\n// Google Sheets filter dropdown (which fails to bind on import -> returns every\n// row unfiltered). Two steps:\n//  1) FILTER: keep only rows whose status is exactly Approved (trimmed +\n//     case-tolerant), so Pending/Posting/Posted/Posted-FB/Failed-FB are excluded.\n//  2) ORDER: sort by post_order NUMERICALLY. organizeQueue() numbers rows with\n//     Number() (1,2,3,...); a string sort would put \"10\" before \"2\". Blank /\n//     non-numeric post_order sorts last. Limit (next node) then takes the top.\nconst isApproved = (it) => String(it.json.status ?? '').trim().toLowerCase() === 'approved';\nconst key = (it) => {\n  const v = it.json.post_order;\n  const n = Number(v);\n  return (v === '' || v === null || v === undefined || Number.isNaN(n)) ? Infinity : n;\n};\nreturn $input.all().filter(isApproved).sort((a, b) => key(a) - key(b));"
+      },
+      "id": "f19a3889-a4b4-42f8-a4eb-9fcb6cebe98e",
+      "name": "Approved rows, numeric order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3136,
+        848
+      ],
+      "notes": "Filters status=Approved AND orders by post_order numerically, in one import-proof step. Replaces the fragile Google Sheets filter and the old string Sort node."
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "e9a096e0-6832-4058-9a9e-6ff593cfdf0c",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2688,
+        848
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "437f0532-f589-40ae-a25e-2f5c720c966a",
+      "name": "All posted",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -2464,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_CONTENT_QUEUE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "The GR Framework - Content Queue",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_QUEUE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "link": "={{ $('Loop Over Items').item.json.link }}",
+            "status": "Posting"
+          },
+          "matchingColumns": [
+            "link"
+          ],
+          "schema": [
+            {
+              "id": "link",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "bd6392ea-f56b-4d0f-81ae-df57d4a89945",
+      "name": "Mark Posting",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -2464,
+        784
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Service Account account"
+        }
+      },
+      "notes": "Interim in-flight marker. Because the queue is filtered to status=Approved in code, a row set to 'Posting' is out of the queue and can't be re-picked next run -> no FB double-post. Every downstream path writes a terminal status, so a row should never be left stuck at 'Posting' unless n8n itself crashes mid-run (rare; treat a lingering 'Posting' as needs-attention)."
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "resource": "fileFolder",
+        "queryString": "={{ $('Loop Over Items').item.json.graphic_key }}",
+        "limit": 1,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "YOUR_GRAPHICS_DRIVE_FOLDER_ID",
+            "mode": "id"
+          }
+        },
+        "options": {}
+      },
+      "id": "25b0d387-bf08-4343-a424-27aff25d0e49",
+      "name": "Find graphic",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -2240,
+        784
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        }
+      },
+      "id": "7e9066e9-684a-41f4-9240-07dc75c73233",
+      "name": "Download graphic",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -2016,
+        784
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Service Account account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v26.0/YOUR_PAGE_ID/photos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "published",
+              "value": "false"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "source",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a3bd3391-3359-4e7f-92c3-d89813241a9e",
+      "name": "Upload FB photo (unpublished)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1792,
+        784
+      ],
+      "onError": "continueErrorOutput",
+      "notes": "STEP 1 of the FB post. Uploads the image as an UNPUBLISHED photo (published=false) -> returns { id } = photo id. No caption here; the caption rides on the feed post. Nothing is visible yet, so a failure here is a clean 'nothing live' -> Mark Failed-FB. No auto-retry (a retried upload orphans a duplicate photo)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v26.0/YOUR_PAGE_ID/feed",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $('Loop Over Items').item.json.draft_caption }}"
+            },
+            {
+              "name": "attached_media[0]",
+              "value": "={{ JSON.stringify({ media_fbid: $('Upload FB photo (unpublished)').item.json.id }) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "abb72b7c-2893-4eac-a943-26061d9acd68",
+      "name": "Create FB feed post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1568,
+        704
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput",
+      "notes": "STEP 2 of the FB post - the fix for 'shows as a photo, not a post'. POST /{page}/feed with the caption as `message` and the unpublished photo attached via attached_media[0] -> publishes a standard status-with-photo that lands in the Page's Posts/feed tab (not just the Photos tab, which a bare /photos upload can be categorized under). Returns { id: '{page}_{post}' } used for the permalink. FB IS LIVE once this succeeds, so any later (IG) failure becomes Posted-FB, not Failed-FB. Retries 3x every 5s to absorb the RACE where the just-uploaded unpublished photo is not yet processable by /feed (manual step-by-step works because of the human delay; a fast auto-run can hit 'media not ready'). If it still fails, only an invisible unpublished photo exists -> Mark Failed-FB."
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v26.0/{{ $('Upload FB photo (unpublished)').item.json.id }}?fields=images",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "options": {}
+      },
+      "id": "c750932d-0b46-4396-8eea-6ad4ac9c9f3a",
+      "name": "Get FB image URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1344,
+        656
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput",
+      "notes": "GET /{photo-id}?fields=images -> images[0].source is a public fbcdn URL handed to Instagram (IG fetches by URL, can't take bytes). Reads the photo id from the Upload node. This runs AFTER the FB feed post is already live, so any failure here routes to 'Mark FB posted, IG failed' (FB kept, IG retried separately)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v26.0/{{ $('Get IG user ID').first().json.instagram_business_account.id }}/media",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "image_url",
+              "value": "={{ $json.images[0].source }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $('Loop Over Items').item.json.draft_caption }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "443e5daa-f05f-4855-9d76-fd222ac6d4e0",
+      "name": "IG create container",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1120,
+        592
+      ],
+      "onError": "continueErrorOutput",
+      "notes": "POST /{ig-user-id}/media -> returns { id: creation_id }. Requires the token scope instagram_content_publish (a FB-only token fails here with (#10) and routes to 'Mark FB posted, IG failed')."
+    },
+    {
+      "parameters": {
+        "amount": 6
+      },
+      "id": "7dda2b1a-df3a-497f-ac3a-dcc47c740ba8",
+      "name": "Wait for IG container",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -896,
+        592
+      ],
+      "webhookId": "gr-ig-container-wait",
+      "onError": "continueErrorOutput",
+      "notes": "Short pause so Meta finishes processing the image container before publish, avoiding the occasional 'media not available' race. On error -> 'Mark FB posted, IG failed'."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v26.0/{{ $('Get IG user ID').first().json.instagram_business_account.id }}/media_publish",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "creation_id",
+              "value": "={{ $('IG create container').item.json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "40c31e96-a053-4e72-8b49-afda41e9d8ab",
+      "name": "IG publish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -432,
+        512
+      ],
+      "onError": "continueErrorOutput",
+      "notes": "POST /{ig-user-id}/media_publish -> returns { id: ig_media_id }. No auto-retry (avoids a double IG post). On error -> 'Mark FB posted, IG failed'."
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_CONTENT_QUEUE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "The GR Framework - Content Queue",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_QUEUE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "link": "={{ $('Loop Over Items').item.json.link }}",
+            "status": "Posted",
+            "posted_at": "={{ $now.toISO() }}",
+            "permalink": "=https://www.facebook.com/{{ $('Create FB feed post').item.json.id }}",
+            "fb_photo_id": "={{ $('Upload FB photo (unpublished)').item.json.id }}",
+            "image_url": "={{ $('Get FB image URL').item.json.images[0].source }}",
+            "ig_posted_at": "={{ $now.toISO() }}",
+            "ig_media_id": "={{ $('IG publish').first().json.id || ($('IG publish').first().json.body || {}).id || '' }}",
+            "error_note": ""
+          },
+          "matchingColumns": [
+            "link"
+          ],
+          "schema": [
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "link",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pub_date",
+              "displayName": "pub_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_text",
+              "displayName": "source_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pillar",
+              "displayName": "pillar",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "graphic_caption",
+              "displayName": "graphic_caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "draft_caption",
+              "displayName": "draft_caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "graphic_key",
+              "displayName": "graphic_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_order",
+              "displayName": "post_order",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "posted_at",
+              "displayName": "posted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fb_photo_id",
+              "displayName": "fb_photo_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "image_url",
+              "displayName": "image_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ig_posted_at",
+              "displayName": "ig_posted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ig_media_id",
+              "displayName": "ig_media_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error_note",
+              "displayName": "error_note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "02bf523d-39b6-4a08-ad47-30fbc8dcb377",
+      "name": "Mark Posted",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        480,
+        1248
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Service Account account"
+        }
+      },
+      "notes": "FULL SUCCESS path: FB feed post + IG both live. permalink uses the FEED POST id from 'Create FB feed post'; fb_photo_id is the uploaded photo id."
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_CONTENT_QUEUE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "The GR Framework - Content Queue",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_QUEUE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "link": "={{ $('Loop Over Items').item.json.link }}",
+            "status": "Posted-FB",
+            "posted_at": "={{ $now.toISO() }}",
+            "permalink": "=https://www.facebook.com/{{ $('Create FB feed post').item.json.id }}",
+            "fb_photo_id": "={{ $('Upload FB photo (unpublished)').item.json.id }}",
+            "error_note": "FB feed post is LIVE; IG step failed. Retry IG ONLY from the stored fb_photo_id - do NOT re-Approve this row (that re-posts to FB). See the failed n8n execution for the exact IG error (common: (#10) token missing instagram_content_publish)."
+          },
+          "matchingColumns": [
+            "link"
+          ],
+          "schema": [
+            {
+              "id": "link",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "posted_at",
+              "displayName": "posted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fb_photo_id",
+              "displayName": "fb_photo_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error_note",
+              "displayName": "error_note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "3541e466-7314-4333-a17d-cb017e58f18e",
+      "name": "Mark FB posted, IG failed",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -496,
+        800
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Service Account account"
+        }
+      },
+      "notes": "PARTIAL FAILURE (FB feed post live, IG not). Terminal status 'Posted-FB' keeps the row out of the Approved queue so FB is never re-posted, records the feed-post permalink + fb_photo_id so an IG-only retry can finish IG, and writes a human error_note. Runs BEFORE 'Raise failure (IG)' so the sheet is truthful even though the run is then marked failed for alerting."
+    },
+    {
+      "parameters": {
+        "errorMessage": "GR Workflow B - PARTIAL POST: the Facebook feed post is LIVE but Instagram FAILED. The row is marked 'Posted-FB' with fb_photo_id stored. Do NOT re-Approve it (that re-posts FB); retry Instagram only. Check this execution for the exact IG error (common: (#10) token missing instagram_content_publish, container not ready, or bad image_url)."
+      },
+      "id": "16b0a387-c211-4ed4-be54-ce60087f5326",
+      "name": "Raise failure (IG)",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        1024
+      ],
+      "notes": "Re-throws AFTER the sheet is updated, so the execution is flagged failed and the existing global Error workflow fires the #your-error-channel Slack alert - no Slack credential needed inside Workflow B."
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_CONTENT_QUEUE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "The GR Framework - Content Queue",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_CONTENT_QUEUE_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "link": "={{ $('Loop Over Items').item.json.link }}",
+            "status": "Failed-FB",
+            "error_note": "FB post failed; nothing is visible on FB or IG (an unpublished photo may be orphaned in the Page's photo store). Row held out of the Approved queue. Review this execution, then re-Approve to retry (safe - no post went out)."
+          },
+          "matchingColumns": [
+            "link"
+          ],
+          "schema": [
+            {
+              "id": "link",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error_note",
+              "displayName": "error_note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "f790fa3f-9e9c-4d30-b2e7-6a2923f25627",
+      "name": "Mark Failed-FB",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -1344,
+        1120
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googleApi": {
+          "id": "YOUR_GOOGLE_CREDENTIAL_ID",
+          "name": "Google Service Account account"
+        }
+      },
+      "notes": "TOTAL FAILURE (no FB feed post). Reached when the photo upload OR the feed-post create fails. Terminal status 'Failed-FB' pulls the row out of the Approved queue; re-Approving is safe because nothing is visible."
+    },
+    {
+      "parameters": {
+        "errorMessage": "GR Workflow B - FB POST FAILED: nothing is visible on the Page (an unpublished photo may be orphaned). Row marked 'Failed-FB'. Safe to re-Approve to retry once the cause is fixed. Check this execution for the FB error (common: token/scope, image download, or Graph API issue)."
+      },
+      "id": "6b45996a-1903-4fbe-9429-ee36a50f42a7",
+      "name": "Raise failure (FB)",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        1120
+      ],
+      "notes": "Re-throws AFTER 'Mark Failed-FB', so the run is flagged failed and the global Error workflow alerts to #your-error-channel."
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -2912,
+        848
+      ],
+      "id": "5d16d55c-7f23-4f45-a605-f50494cf3d89",
+      "name": "Limit1",
+      "notes": "One post per run. The schedule fires once per slot, so 1 slot = 1 post."
+    },
+    {
+      "parameters": {
+        "content": "## 1) INGEST + CAPTION\n**Schedule -> RSS -> filter/dedupe -> Gemini -> Content Queue (Pending)**",
+        "height": 176,
+        "width": 384
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -4640,
+        -192
+      ],
+      "typeVersion": 1,
+      "id": "47be332b-8305-4694-b034-86f1bf8a0288",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## 2) PUBLISH\n**token check -> pull graphic -> FB feed post -> IG publish. Idempotent status machine + partial-failure guard.** ",
+        "height": 176,
+        "width": 480
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -4640,
+        816
+      ],
+      "typeVersion": 1,
+      "id": "aa0ff165-25e8-4f07-bfd4-0888833a3fce",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## 3) ERROR HANDLER\n**catches any failure, throttles repeats, alerts Telegram + Slack + Sheet log.**",
+        "width": 304
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -4688,
+        1760
+      ],
+      "typeVersion": 1,
+      "id": "ef397c0d-3d18-4cf4-9108-360461dbde94",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## SETUP: see workflows/README.md. Replace YOUR_* placeholders and re-select credentials before running.",
+        "height": 192
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1952,
+        -624
+      ],
+      "typeVersion": 1,
+      "id": "01a98af2-31af-430e-9f62-154b3aa0ad40",
+      "name": "Sticky Note3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Format + throttle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format + throttle": {
+      "main": [
+        [
+          {
+            "node": "Alert? (not throttled)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log to Error sheet (paper trail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert? (not throttled)": {
+      "main": [
+        [
+          {
+            "node": "Telegram alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Slack alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "RSS Read",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS Read1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS Read OpenAI",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS Read FastCo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Read": {
+      "main": [
+        [
+          {
+            "node": "Set source (n8n Blog)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set source (n8n Blog)": {
+      "main": [
+        [
+          {
+            "node": "Merge feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Read1": {
+      "main": [
+        [
+          {
+            "node": "Set source (Zapier Blog)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set source (Zapier Blog)": {
+      "main": [
+        [
+          {
+            "node": "Merge feeds",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "RSS Read OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Set source (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set source (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Merge feeds",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "RSS Read FastCo": {
+      "main": [
+        [
+          {
+            "node": "Set source (Fast Company Tech)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set source (Fast Company Tech)": {
+      "main": [
+        [
+          {
+            "node": "Merge feeds",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge feeds": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Split fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split fields": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking 'Execute workflow'": {
+      "main": [
+        [
+          {
+            "node": "Check token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule (EDT)": {
+      "main": [
+        [
+          {
+            "node": "Check token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check token": {
+      "main": [
+        [
+          {
+            "node": "Get IG user ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Token invalid - stop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get IG user ID": {
+      "main": [
+        [
+          {
+            "node": "Get queue rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get queue rows": {
+      "main": [
+        [
+          {
+            "node": "Approved rows, numeric order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved rows, numeric order": {
+      "main": [
+        [
+          {
+            "node": "Limit1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "All posted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Posting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Posting": {
+      "main": [
+        [
+          {
+            "node": "Find graphic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find graphic": {
+      "main": [
+        [
+          {
+            "node": "Download graphic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download graphic": {
+      "main": [
+        [
+          {
+            "node": "Upload FB photo (unpublished)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload FB photo (unpublished)": {
+      "main": [
+        [
+          {
+            "node": "Create FB feed post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed-FB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create FB feed post": {
+      "main": [
+        [
+          {
+            "node": "Get FB image URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Failed-FB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get FB image URL": {
+      "main": [
+        [
+          {
+            "node": "IG create container",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark FB posted, IG failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG create container": {
+      "main": [
+        [
+          {
+            "node": "Wait for IG container",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark FB posted, IG failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for IG container": {
+      "main": [
+        [
+          {
+            "node": "IG publish",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark FB posted, IG failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG publish": {
+      "main": [
+        [
+          {
+            "node": "Mark Posted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark FB posted, IG failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Posted": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark FB posted, IG failed": {
+      "main": [
+        [
+          {
+            "node": "Raise failure (IG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Failed-FB": {
+      "main": [
+        [
+          {
+            "node": "Raise failure (FB)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "3e8dfded-3877-4d1b-83c3-4a82f9f09307",
+  "meta": {
+    "instanceId": "REMOVED"
+  },
+  "nodeGroups": [],
+  "id": "ESQQTF6Gkyw9v3th",
+  "tags": []
+}

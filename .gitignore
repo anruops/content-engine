@@ -1,0 +1,15 @@
+# Secrets — never commit these
+.env
+.env.*
+credentials.json
+*.key
+*secret*
+*token*.json
+
+# n8n / node
+node_modules/
+*.log
+
+# OS cruft
+.DS_Store
+Thumbs.db
