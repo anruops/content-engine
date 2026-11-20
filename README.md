@@ -2,7 +2,7 @@
 
 A self-hosted [n8n](https://n8n.io) system that ingests industry news, drafts on-brand social captions with an LLM, and publishes to Facebook and Instagram on a schedule. No human in the loop after approval, and real-time alerting the moment anything breaks.
 
-> **Status:** Built and running (Sept 2026), maintained in production. This repository documents the architecture and shares **sanitized** material. It's a portfolio reference and a build I run for my own brand, not a one-click install.
+> **Status:** Ran in production from September 2026. Paused for a Facebook-first v2 redesign; this repository documents the v1 build and shares **sanitized** material. It's a portfolio reference, not a one-click install.
 
 ---
 
